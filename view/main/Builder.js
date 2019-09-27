@@ -9,31 +9,31 @@ Ext.define('GuiBuilder.view.main.Builder', {
   addArgument: function (el, event) {
     var dom = el.dom;
     var index = Number(dom.dataset.currentindex);
-    var slot = this.createFragment({
+    var slot = this.createNode('path', {
       deletable: 'remove',
       editable: true,
       index: index,
-      placeholder: dom.dataset.placeholder,
-      type: 'path'
+      placeholder: dom.dataset.placeholder
     });
-    if (index !== 0) {
-      slot = dom.dataset.join + slot;
-    }
-    this.createElements(slot).forEach(function (node) {
-      dom.parentElement.insertBefore(node, dom);
-    });
+    // if (index !== 0) {
+    //   slot = dom.dataset.join + slot;
+    // }
+    dom.parentElement.insertBefore(slot, dom);
     dom.dataset.currentindex = '' + (index + 1);
+  },
+  createElement: function (html) {
+    var div = document.createElement('div');
+    div.innerHTML = html;
+    return div.childNodes[0];
   },
   createElements: function (html) {
     var div = document.createElement('div');
     div.innerHTML = html;
     return Ext.Array.from(div.childNodes);
   },
-  createFragment: function (config) {
+  createFragment: function (type, config) {
     var span = ['span'];
-    var innerFragment = this.createInnerFragment(config);
-    var type = config.type;
-    delete config.type;
+    var innerFragment = this.createInnerFragment(type, config);
     Ext.Object.each(Ext.apply({
       fn: 'focusInner',
     }, config), function (key, value) {
@@ -47,13 +47,20 @@ Ext.define('GuiBuilder.view.main.Builder', {
     );
     return '<' + span.join(' ') + '>' + innerFragment + '</span>';
   },
-  createInnerFragment: function (config) {
+  createNode: function (type, config) {
+    return this.createElement(this.createFragment(type, config));
+  },
+  createInnerFragment: function (type, config) {
     var str = '&#8203;';
+    var isEmpty = type === 'empty';
     if (!config.static) {
       str += '<span data-fn="switchType" class="gb-action gb-switch-action x-fa fa-chevron-circle-down"></span>&#8203;';
     }
-    str += '<span contenteditable="' + (config.editable || 'false') + '" class="gb-inner"' + (config.placeholder ? ' data-gb-placeholder="' + config.placeholder + '"' : '') + '>' + (config.inner || '') + '</span>&#8203;';
-    if (config.deletable) {
+    if (!isEmpty) {
+      str += '<span contenteditable="' + (config.editable || 'false') + '" class="gb-inner"' + (config.placeholder ? ' data-gb-placeholder="' + config.placeholder + '"' : '') + '>' + (config.inner || '') + '</span>';
+    }
+    str += '&#8203;';
+    if (config.deletable && !isEmpty) {
       str += '<span data-fn="deleteArgument" data-deletetype="' + config.deletable + '" class="gb-action gb-delete-action x-fa fa-times-circle"></span>&#8203;';
     }
     return str;
@@ -66,9 +73,9 @@ Ext.define('GuiBuilder.view.main.Builder', {
         .up('.gb-wrap')
         .down('.gb-action-add');
       var currentIndex = Number(addButton.dom.dataset.currentindex);
-      if (currentIndex > 1) {
-        (Number(slot.dom.dataset.index) === 0 ? slot.dom.nextSibling : slot.dom.previousSibling).remove();
-      }
+      // if (currentIndex > 1) {
+      //   (Number(slot.dom.dataset.index) === 0 ? slot.dom.nextSibling : slot.dom.previousSibling).remove();
+      // }
       var sibling = slot.dom.nextSibling;
       while (sibling) {
         if (sibling.dataset && sibling.dataset.index) {
@@ -78,25 +85,27 @@ Ext.define('GuiBuilder.view.main.Builder', {
       }
       slot.dom.remove();
       addButton.dom.dataset.currentindex = '' + (currentIndex - 1);
+    } else {
+      this.focused = el;
+      this.handleSelect({ definition: { type: 'empty' } });
     }
   },
   focusInner: function (el) {
     var inner = el.down('.gb-inner');
-    function onBlur () {
-      inner.removeCls('gb-active');
-      inner.removeListener('blur', onBlur);
-    }
-    inner.addCls('gb-active');
-    inner.addListener('blur', onBlur);
+    // function onBlur () {
+    //   inner.removeCls('gb-active');
+    //   inner.removeListener('blur', onBlur);
+    // }
+    // inner.addCls('gb-active');
+    // inner.addListener('blur', onBlur);
     inner.dom.focus();
   },
   getSlot: function (args, index, join) {
     if (index === '_' || index === '?') {
-      return this.createFragment({
+      return this.createFragment('block', {
         editable: true,
         index: index,
-        static: true,
-        type: 'block'
+        static: true
       });
     }
     var slot = args[index];
@@ -109,24 +118,23 @@ Ext.define('GuiBuilder.view.main.Builder', {
       var i = 0
       var placeholder = slot.name.replace('...', '');
       for (; i < minNumber; i++) {
-        if (str) {
-          str += join;
-        }
-        str += this.createFragment({
+        // if (str) {
+        //   str += join;
+        // }
+        str += this.createFragment('path', {
           index: index + i,
           editable: true,
-          placeholder: placeholder,
-          type: 'path'
+          placeholder: placeholder
         });
       }
       str += '<span data-fn="addArgument" data-join="' + join + '" data-currentindex="' + i + '" data-placeholder="' + placeholder + '" class="gb-action gb-action-add x-fa fa-plus-circle"></span>';
       return str;
     }
-    return this.createFragment({
+    return this.createFragment('path', {
+      deletable: slot.optional ? 'empty' : undefined,
       index: index,
       editable: true,
-      placeholder: slot.name,
-      type: 'path'
+      placeholder: slot.name
     });
   },
   // html: [
@@ -173,44 +181,22 @@ Ext.define('GuiBuilder.view.main.Builder', {
         if (isBlock && e.shiftKey) {
           e.preventDefault();
           var sel, range;
-          var innerHTML = this.createFragment({
-            editable: true,
-            type: 'path'
+          var node = this.createNode('path', {
+            editable: true
           });
-          if (window.getSelection) {
-            // IE9 and non-IE
-            sel = window.getSelection();
-            if (sel.getRangeAt && sel.rangeCount) {
-              range = sel.getRangeAt(0);
-              range.deleteContents();
+          sel = window.getSelection();
+          if (sel.getRangeAt && sel.rangeCount) {
+            range = sel.getRangeAt(0);
+            range.deleteContents();
 
-              // Range.createContextualFragment() would be useful here but is
-              // only relatively recently standardized and is not supported in
-              // some browsers (IE9, for one)
-              var el = document.createElement("div");
-              // el.innerHTML = templates[0];
-              el.innerHTML = innerHTML;
-              var frag = document.createDocumentFragment(),
-                node, lastNode;
-              while ((node = el.firstChild)) {
-                lastNode = frag.appendChild(node);
-              }
-              range.insertNode(frag);
-              this.switchType(Ext.fly(lastNode).down('.gb-switch-action'));
-              lastNode.children[1].focus();
-
-              // Preserve the selection
-              // if (lastNode) {
-              //   range = range.cloneRange();
-              //   range.setStartAfter(lastNode);
-              //   range.collapse(true);
-              //   sel.removeAllRanges();
-              //   sel.addRange(range);
-              // }
-            }
-          } else if (document.selection && document.selection.type != "Control") {
-            // IE < 9
-            document.selection.createRange().pasteHTML(innerHTML);
+            // Range.createContextualFragment() would be useful here but is
+            // only relatively recently standardized and is not supported in
+            // some browsers (IE9, for one)
+            var frag = document.createDocumentFragment();
+            frag.appendChild(node);
+            range.insertNode(frag);
+            this.switchType(Ext.fly(node).down('.gb-switch-action'));
+            node.children[1].focus();
           }
         } else if (!isBlock) {
           e.preventDefault();
@@ -255,13 +241,14 @@ Ext.define('GuiBuilder.view.main.Builder', {
       type = 'fn';
       block = definition.block;
       name = definition.name;
+      var join = definition.join || ', ';
+      var returns = definition.returns;
       if (definition.display) {
         inner = definition.display.replace(/\{(_|\?|\d+)\}/g, function (match, idx) {
-          return this.getSlot(definition.args, idx)
+          return this.getSlot(definition.args, idx, join);
         }.bind(this));
       } else {
-        var join = definition.join || ', ';
-        inner = '<span class="gb-returns gb-' + definition.returns + '"></span>' + name + '(' + definition.args.map(function (arg, idx) {
+        inner = name + '(' + definition.args.map(function (arg, idx) {
           return this.getSlot(definition.args, idx, join);
         }.bind(this)).join(join) + ')';
       }
@@ -271,12 +258,14 @@ Ext.define('GuiBuilder.view.main.Builder', {
       type = 'text';
     } else if (definition.type === 'rawNumber') {
       // inner = '<span id="' + this.scheduleComp({
-      //   width: 50,
-      //   xtype: 'numberfield'
-      // }) + '"></span>';
+      //     width: 50,
+      //     xtype: 'numberfield'
+      //   }) + '"></span>';
       editable = true;
       placeholder = 'number';
       type = 'number';
+    } else if (definition.type === 'empty') {
+      type = 'empty';
     } else {
       editable = true;
       inner = definition.path;
@@ -289,9 +278,9 @@ Ext.define('GuiBuilder.view.main.Builder', {
       inner: inner,
       name: name,
       placeholder: placeholder,
-      type: type
+      returns: returns
     });
-    var replacement = this.createElements(this.createFragment(config))[0];
+    var replacement = this.createNode(type, config);
     parent.dom.replaceWith(replacement);
     this.flushComps();
   },
@@ -308,242 +297,6 @@ Ext.define('GuiBuilder.view.main.Builder', {
       Data.buildData(),
       Data.buildFunctions()
     ];
-    // var items = [{
-    //   menu: {
-    //     defaults: {
-    //       listeners: {
-    //         click: {
-    //           fn: handleSelect,
-    //           scope: this
-    //         }
-    //       }
-    //     },
-    //     items: [{
-    //       definition: {
-    //         path: 'connectors',
-    //         type: 'object'
-    //       },
-    //       menu: {
-    //         defaults: {
-    //           listeners: {
-    //             click: {
-    //               fn: handleSelect,
-    //               scope: this
-    //             }
-    //           }
-    //         },
-    //         items: [{
-    //           definition: {
-    //             path: 'connectors.people',
-    //             type: 'array'
-    //           },
-    //           text: 'people'
-    //         }]
-    //       },
-    //       text: 'connectors'
-    //     }, {
-    //       menu: {
-    //         defaults: {
-    //           listeners: {
-    //             click: {
-    //               fn: handleSelect,
-    //               scope: this
-    //             }
-    //           }
-    //         },
-    //         items: [{
-    //           definition: {
-    //             path: 'inputs.Date',
-    //             type: 'object'
-    //           },
-    //           menu: {
-    //             defaults: {
-    //               listeners: {
-    //                 click: {
-    //                   fn: handleSelect,
-    //                   scope: this
-    //                 }
-    //               }
-    //             },
-    //             items: [{
-    //               definition: {
-    //                 path: 'inputs.Date.end',
-    //                 type: 'string'
-    //               },
-    //               text: 'end'
-    //             }, {
-    //               definition: {
-    //                 path: 'inputs.Date.start',
-    //                 type: 'string'
-    //               },
-    //               text: 'start'
-    //             }, {
-    //               definition: {
-    //                 path: 'inputs.Date.value',
-    //                 type: 'string'
-    //               },
-    //               text: 'value'
-    //             }]
-    //           },
-    //           text: 'Date'
-    //         }, {
-    //           definition: {
-    //             path: 'inputs.Name',
-    //             type: 'object'
-    //           },
-    //           menu: {
-    //             defaults: {
-    //               listeners: {
-    //                 click: {
-    //                   fn: handleSelect,
-    //                   scope: this
-    //                 }
-    //               }
-    //             },
-    //             items: [{
-    //               definition: {
-    //                 path: 'inputs.Name.first',
-    //                 type: 'string'
-    //               },
-    //               text: 'first'
-    //             }, {
-    //               definition: {
-    //                 path: 'inputs.Name.last',
-    //                 type: 'string'
-    //               },
-    //               text: 'last'
-    //             }]
-    //           },
-    //           text: 'Name'
-    //         }]
-    //       },
-    //       text: 'inputs'
-    //     }]
-    //   },
-    //   text: 'Data'
-    // }, {
-    //   menu: {
-    //     items: [{
-    //       menu: {
-    //         defaults: {
-    //           listeners: {
-    //             click: {
-    //               fn: handleSelect,
-    //               scope: this
-    //             }
-    //           }
-    //         },
-    //         items: [{
-    //           definition: {
-    //             args: [{
-    //               name: '...item',
-    //               type: 'any'
-    //             }],
-    //             name: 'array',
-    //             type: 'function'
-    //           },
-    //           text: 'Array'
-    //         }]
-    //       },
-    //       text: 'Array'
-    //     }, {
-    //       menu: {
-    //         defaults: {
-    //           listeners: {
-    //             click: {
-    //               fn: handleSelect,
-    //               scope: this
-    //             }
-    //           }
-    //         },
-    //         items: [{
-    //           definition: {
-    //             args: [{
-    //               name: 'list',
-    //               type: 'array'
-    //             }],
-    //             block: true,
-    //             display: 'for each item in {0}, do {_}; else, do {?}',
-    //             name: 'each',
-    //             type: 'function'
-    //           },
-    //           text: 'Each'
-    //         }, {
-    //           definition: {
-    //             args: [{
-    //               name: 'boolean',
-    //               type: 'any'
-    //             }],
-    //             block: true,
-    //             display: 'if {0} then {_} otherwise {?}',
-    //             name: 'if',
-    //             type: 'function'
-    //           },
-    //           text: 'If'
-    //         }]
-    //       },
-    //       text: 'Block'
-    //     }, {
-    //       menu: {
-    //         defaults: {
-    //           listeners: {
-    //             click: {
-    //               fn: handleSelect,
-    //               scope: this
-    //             }
-    //           }
-    //         },
-    //         items: [{
-    //           definition: {
-    //             args: [{
-    //               name: 'date',
-    //               type: 'date'
-    //             }, {
-    //               enum: [
-    //                 'day',
-    //                 'month',
-    //                 'year'
-    //               ],
-    //               name: 'type'
-    //             }],
-    //             // display: 'extract {1} from {0}',
-    //             name: 'dateGet',
-    //             returns: 'date',
-    //             type: 'function'
-    //           },
-    //           text: 'Get Date'
-    //         }]
-    //       },
-    //       text: 'Date'
-    //     }, {
-    //       menu: {
-    //         defaults: {
-    //           listeners: {
-    //             click: {
-    //               fn: handleSelect,
-    //               scope: this
-    //             }
-    //           }
-    //         },
-    //         items: [{
-    //           definition: {
-    //             args: [{
-    //               name: '...number',
-    //               type: 'number'
-    //             }],
-    //             join: ' + ',
-    //             name: 'sum',
-    //             returns: 'number',
-    //             type: 'function'
-    //           },
-    //           text: 'Sum'
-    //         }]
-    //       },
-    //       text: 'Math'
-    //     }]
-    //   },
-    //   text: 'Functions'
-    // }];
     if (el.up('.gb-wrap').up('.gb-wrap')) {
       items.push({
         definition: {
@@ -563,14 +316,11 @@ Ext.define('GuiBuilder.view.main.Builder', {
         text: 'Text'
       });
     }
-    // Ext.create({
-    var menu = this.add({
+    this.add({
       constrainTo: document,
       items: items,
       xtype: 'menu'
-    });
-    // debugger
-    menu.showAt(
+    }).showAt(
       el.dom.offsetLeft + (el.getWidth() / 2),
       el.dom.offsetTop + el.getHeight()
     );

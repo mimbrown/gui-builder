@@ -145,6 +145,22 @@ Ext.define('GuiBuilder.view.main.Data', {
                 type: 'function'
             },
             text: 'Get Date'
+        }, {
+            definition: {
+                args: [{
+                    name: 'date',
+                    type: 'date'
+                }, {
+                    name: 'format',
+                    optional: true,
+                    type: 'string'
+                }],
+                // display: 'extract {1} from {0}',
+                name: 'format',
+                returns: 'string',
+                type: 'function'
+            },
+            text: 'Format'
         }],
         text: 'Date'
     }, {
